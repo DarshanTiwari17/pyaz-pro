@@ -4,7 +4,7 @@ uvicorn[standard]>=0.27.0
 
 # Database & ORM
 sqlalchemy>=2.0.23
-aiosqlite>=3.7.0
+aiosqlite
 pydantic>=2.7.0
 pydantic-settings>=2.2.1
 
