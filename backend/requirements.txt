@@ -26,4 +26,8 @@ python-dotenv>=1.0.0
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 sqlalchemy[asyncio]
+<<<<<<< HEAD
 python-multipart
+=======
+python-multipart
+>>>>>>> 62340ddd7e27304190e559324b374d82b8a39c49
