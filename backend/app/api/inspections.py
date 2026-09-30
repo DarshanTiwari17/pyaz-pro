@@ -127,7 +127,7 @@ async def live_detect_frame(request: dict):
         if pyaaz_pro_dir not in sys.path:
             sys.path.insert(0, pyaaz_pro_dir)
             
-        from size_estimator import onion_diameter_mm, px_diameter_from_bbox
+        from app.services.size_estimator import onion_diameter_mm, px_diameter_from_bbox
         from app.services.grader import OnionInput, decide, quality_score as qs
 
         raw = []
