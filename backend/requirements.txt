@@ -1,28 +1,24 @@
-# PYAAZ-PRO Backend Requirements
-# AI-Powered Onion Quality & Procurement Intelligence Platform
-# Problem Statement 26031 | Ministry of Consumer Affairs
+# Core Web Framework
+fastapi>=0.104.1
+uvicorn[standard]>=0.27.0
 
-# === Core Web Framework ===
-fastapi>=0.104.1          # Main API framework
-uvicorn[standard]>=0.27.0 # ASGI server for production
+# Database & ORM
+sqlalchemy>=2.0.23
+aiosqlite>=3.7.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.1
 
-# === Database & ORM ===
-sqlalchemy>=2.0.23        # ORM and query builder
-aiosqlite>=3.7.0          # Async SQLite driver (DATABASE_URL uses sqlite+aiosqlite)
-pydantic>=2.7.0           # Data validation and settings management
-pydantic-settings>=2.2.1  # Pydantic settings for configuration
+# Computer Vision
+opencv-python-headless>=4.8.0  # use headless version for server environments
+numpy>=1.24.0
 
-# === Computer Vision & Image Processing ===
-opencv-python>=4.8.0      # cv2 - Computer vision pipeline (ai_engine.py: Laplacian, HSV segmentation, contour detection)
-numpy>=1.24.0             # Numerical operations (ai_engine.py, eval_engine.py: array math, mean confidence)
+# Authentication & Security
+PyJWT>=2.8.0
+cryptography>=41.0.0
 
-# === Authentication & Security ===
-PyJWT>=2.8.0              # JWT token creation/verification (security.py: create_access_token, decode_token)
-cryptography>=41.0.0      # Low-level crypto for JWT signing (PyJWT dependency, also used implicitly)
+# Utilities
+python-dotenv>=1.0.0
 
-# === Utilities (stdlib + optional) ===
-python-dotenv>=1.0.0      # Environment variable loading (optional, for local development)
-
-# === Development & Testing ===
-pytest>=7.4.0             # Test framework
-pytest-asyncio>=0.21.0    # Async test support for FastAPI
+# Development & Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
