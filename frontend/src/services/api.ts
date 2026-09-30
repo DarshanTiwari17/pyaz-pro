@@ -308,6 +308,39 @@ class ApiService {
   async getCenters(): Promise<ProcurementCenter[]> {
     return this.request<ProcurementCenter[]>('/users/centers');
   }
+
+  // ── Live YOLO detection ────────────────────────────────────────────────────
+  /** Send a single base64-encoded camera frame; returns YOLO bounding boxes. */
+  async liveDetectFrame(frameBase64: string): Promise<LiveDetectResult> {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const resp = await fetch(`${API_BASE_URL}/inspections/live-detect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ frame: frameBase64 }),
+    });
+    if (!resp.ok) throw new Error(`Live detect error ${resp.status}`);
+    return resp.json();
+  }
 }
 
 export const api = new ApiService();
+
+// ── Live detection types (used by LiveInspectionCamera) ──────────────────────
+export interface LiveDetection {
+  class_name: 'Healthy' | 'Rotten' | 'Sprouted' | 'Damaged';
+  confidence: number;
+  color: string;
+  bbox: [number, number, number, number]; // [x1, y1, x2, y2] in frame pixels
+  diameter_mm: number | null;
+  decision: 'CHOOSE' | 'DO NOT CHOOSE';
+  quality_score: number;
+  size_grade: string;
+}
+
+export interface LiveDetectResult {
+  detections: LiveDetection[];
+  frame_width: number;
+  frame_height: number;
+  model: string;
+  error?: string;
+}

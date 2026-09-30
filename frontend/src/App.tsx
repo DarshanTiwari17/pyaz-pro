@@ -22,10 +22,12 @@ import { SettingsPage } from './pages/SettingsPage';
 const AppContent: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [selectedLotId, setSelectedLotId] = useState<string | undefined>(undefined);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   const handleNavigate = (tab: string, lotId?: string) => {
     setCurrentTab(tab);
     if (lotId) setSelectedLotId(lotId);
+    setMobileMenuOpen(false);
   };
 
   const renderContent = () => {
@@ -62,13 +64,22 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      <Navbar />
-      <OfflineBanner />
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans print:bg-white print:min-h-0">
+      <div className="no-print print:hidden">
+        <Navbar onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)} />
+        <OfflineBanner />
+      </div>
 
-      <div className="flex-1 flex">
-        <Sidebar currentTab={currentTab} onSelectTab={setCurrentTab} />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+      <div className="flex-1 flex print:block">
+        <div className="no-print print:hidden">
+          <Sidebar
+            currentTab={currentTab}
+            onSelectTab={handleNavigate}
+            mobileOpen={mobileMenuOpen}
+            onCloseMobile={() => setMobileMenuOpen(false)}
+          />
+        </div>
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl mx-auto w-full print:p-0 print:m-0 print:max-w-none print:w-full print:overflow-visible print:block">
           {renderContent()}
         </main>
       </div>

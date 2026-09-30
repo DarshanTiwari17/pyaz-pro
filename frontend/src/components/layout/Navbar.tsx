@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
-import { UserCheck, ShieldCheck, ChevronDown, Building2, Wifi, WifiOff } from 'lucide-react';
+import { UserCheck, ShieldCheck, ChevronDown, Building2, Wifi, WifiOff, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../types';
 
-export const Navbar: React.FC = () => {
+interface NavbarProps {
+  onToggleMobileMenu?: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ onToggleMobileMenu }) => {
   const { currentUser, personas, role, switchPersona, isOffline } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -19,19 +23,24 @@ export const Navbar: React.FC = () => {
     <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Brand Logo & Gov Banner */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-forest-800 border border-forest-600 flex items-center justify-center shadow-inner">
-              <div className="w-5 h-5 rounded-full border-2 border-amber-400 bg-forest-600 flex items-center justify-center">
-                <div className="w-2 h-2 rounded-full bg-white"></div>
+          {/* Brand Logo & Gov Banner & Mobile Hamburger Button */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={onToggleMobileMenu}
+              className="p-2 -ml-1 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 md:hidden flex items-center justify-center"
+              aria-label="Toggle Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-forest-800 border border-forest-600 flex items-center justify-center shadow-inner flex-shrink-0">
+              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-amber-400 bg-forest-600 flex items-center justify-center">
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-white"></div>
               </div>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-lg tracking-wider text-white">PYAAZ-PRO</span>
-                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-forest-800/80 text-forest-200 border border-forest-600 font-mono">
-                  {/* PS ID: 26031 - Project Reference */}
-                </span>
+                <span className="font-extrabold text-base sm:text-lg tracking-wider text-white">PYAAZ-PRO</span>
               </div>
               <p className="text-xs text-slate-400 hidden sm:block">
                 Dept. of Consumer Affairs • Ministry of Consumer Affairs, Food & Public Distribution

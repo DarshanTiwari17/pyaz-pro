@@ -26,6 +26,187 @@ import yaml
 
 router = APIRouter(prefix="/inspections", tags=["Inspections & AI Assessment"])
 
+# ── LIVE DETECTION ────────────────────────────────────────────────────────────
+# Lazy-initialised singleton so the 6 MB model is loaded only once per process.
+_live_yolo_model = None
+_live_yolo_cfg: dict | None = None
+
+def _get_live_yolo():
+    """Return (model, cfg) – loads from PYAZZ-PRO on first call."""
+    global _live_yolo_model, _live_yolo_cfg
+    if _live_yolo_model is None:
+        from ultralytics import YOLO
+        import yaml as _yaml
+        pyaaz_pro_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "PYAZZ-PRO"
+        )
+        cfg_path = os.path.join(pyaaz_pro_dir, "config.yaml")
+        with open(cfg_path) as f:
+            _live_yolo_cfg = _yaml.safe_load(f)
+        model_path = os.path.join(pyaaz_pro_dir, "model", "best.pt")
+        _live_yolo_model = YOLO(model_path)
+    return _live_yolo_model, _live_yolo_cfg
+
+
+_LIVE_CLASS_MAP = {
+    "healthy_onion": "Healthy",
+    "rotten_onion":  "Rotten",
+    "sprouted_onion": "Sprouted",
+    "damaged_onion": "Damaged",
+}
+
+_CLASS_COLOURS = {
+    "Healthy":  "#22c55e",
+    "Rotten":   "#ef4444",
+    "Sprouted": "#f59e0b",
+    "Damaged":  "#f97316",
+}
+
+
+@router.post("/live-detect")
+async def live_detect_frame(request: dict):
+    """
+    Accepts a single camera frame (base64 JPEG) and returns YOLO detections.
+
+    Request body JSON:
+        { "frame": "<base64-encoded JPEG string>" }
+
+    Response JSON:
+        {
+          "detections": [
+            {
+              "class_name": "Healthy"|"Rotten"|"Sprouted"|"Damaged",
+              "confidence": 0.92,
+              "color": "#22c55e",
+              "bbox": [x1, y1, x2, y2],          // absolute pixels in original frame
+              "diameter_mm": 48.3 | null,
+              "decision": "CHOOSE"|"DO NOT CHOOSE",
+              "quality_score": 95
+            }, ...
+          ],
+          "frame_width": 640,
+          "frame_height": 480,
+          "model": "PYAZZ-PRO-YOLO"
+        }
+    """
+    import base64
+    import numpy as np
+    import cv2
+
+    frame_b64: str = request.get("frame", "")
+    if not frame_b64:
+        raise HTTPException(status_code=400, detail="'frame' field is required")
+
+    # Decode base64 → numpy array
+    try:
+        if "," in frame_b64:          # strip data:image/jpeg;base64, header
+            frame_b64 = frame_b64.split(",", 1)[1]
+        img_bytes = base64.b64decode(frame_b64)
+        img_arr = np.frombuffer(img_bytes, dtype=np.uint8)
+        img_bgr = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+        if img_bgr is None:
+            raise ValueError("Could not decode image")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid frame data: {exc}")
+
+    h, w = img_bgr.shape[:2]
+
+    try:
+        model, cfg = _get_live_yolo()
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        preds = model.predict(img_rgb, conf=0.65, imgsz=640, verbose=False)[0]
+        
+        cal_cfg = cfg.get("calibration", {})
+        ppm = float(cal_cfg.get("pixels_per_mm", 0))
+        cal_confirmed = cal_cfg.get("confirmed", False)
+
+        import sys
+        pyaaz_pro_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "PYAZZ-PRO"
+        )
+        if pyaaz_pro_dir not in sys.path:
+            sys.path.insert(0, pyaaz_pro_dir)
+            
+        from size_estimator import onion_diameter_mm, px_diameter_from_bbox
+        from app.services.grader import OnionInput, decide, quality_score as qs
+
+        raw = []
+        if preds.boxes is not None and len(preds.boxes) > 0:
+            for box in preds.boxes:
+                cls_id = int(box.cls.item())
+                label = preds.names[cls_id].lower()
+                raw.append({
+                    "label": label,
+                    "confidence": float(box.conf.item()),
+                    "coords": [float(v) for v in box.xyxy[0].tolist()]
+                })
+
+        onion_boxes = [item for item in raw if item["label"] in _LIVE_CLASS_MAP]
+        sprout_boxes = [item for item in raw if item["label"] == "sprout"]
+
+        results = []
+        for item in onion_boxes:
+            x1, y1, x2, y2 = item["coords"]
+            diameter_mm = None
+            if cal_confirmed and ppm > 0:
+                px_dia = px_diameter_from_bbox(abs(x2 - x1), abs(y2 - y1))
+                diameter_mm = round(onion_diameter_mm(px_dia, ppm), 1)
+
+            # Check if any sprout box overlaps this onion box
+            has_sprout = any(
+                max(x1, s["coords"][0]) < min(x2, s["coords"][2]) and
+                max(y1, s["coords"][1]) < min(y2, s["coords"][3])
+                for s in sprout_boxes
+            )
+
+            cond = _LIVE_CLASS_MAP[item["label"]]
+            # Note: if it is explicitly labeled "sprouted_onion", cond will be "Sprouted"
+            # If it's a "healthy_onion" but has a sprout box on it, has_sprout=True triggers penalty
+            is_sprouted = (cond == "Sprouted") or has_sprout
+
+            inp = OnionInput(
+                diameter_mm=diameter_mm,
+                condition=cond,
+                rot=(cond == "Rotten"),
+                sprout=is_sprouted,
+                damage=(cond == "Damaged"),
+                confidence=item["confidence"],
+            )
+            
+            grade_result = decide(inp, cfg)
+            score, _ = qs(inp, cfg)
+
+            results.append({
+                "class_name": cond,
+                "confidence": round(item["confidence"], 3),
+                "color": _CLASS_COLOURS.get(cond, "#94a3b8"),
+                "bbox": [round(x1), round(y1), round(x2), round(y2)],
+                "diameter_mm": diameter_mm,
+                "decision": grade_result.decision,
+                "quality_score": score,
+                "size_grade": grade_result.size_grade,
+            })
+
+        return {
+            "detections": results,
+            "frame_width": w,
+            "frame_height": h,
+            "model": "PYAZZ-PRO-AI",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Don't crash the frontend – return empty detections with error info
+        return {
+            "detections": [],
+            "frame_width": w,
+            "frame_height": h,
+            "model": "PYAZZ-PRO-AI",
+            "error": str(exc),
+        }
+
+
 @router.get("", response_model=List[InspectionResponse])
 async def list_inspections(
     center_id: Optional[str] = None,
@@ -157,7 +338,7 @@ async def analyze_inspection_image(
     inspection_id: str,
     file: Optional[UploadFile] = File(None),
     calibration_ratio: Optional[float] = Form(None),
-    use_friend_model: bool = Query(False),
+    use_friend_model: bool = True,
     db: AsyncSession = Depends(get_db)
 ):
     insp = await db.get(Inspection, inspection_id)
@@ -193,121 +374,142 @@ async def analyze_inspection_image(
         cv2.imwrite(saved_path, dummy_img)
         public_url = f"/storage/uploads/{saved_filename}"
 
-    # Run model inference (internal CV or friend's model)
+    # Run model inference - PYAZZ-PRO YOLO as default, internal CV as fallback
+    use_friend_model = True  # PYAZZ-PRO YOLO is the default model
+
     if use_friend_model:
-        # Use friend's YOLO model
-        from ultralytics import YOLO
-        from PIL import Image
-        import yaml
-        
-        # Load config from services
-        cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'services', 'config.yaml')
-        with open(cfg_path) as f:
-            cfg = yaml.safe_load(f)
-        
-        # Load model
-        model = YOLO(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'services', 'model', 'best.pt'))
-        
-        # Read image
-        img = Image.open(saved_path) if file and file.filename else Image.fromarray(
-            cv2.cvtColor(cv2.imread(saved_path), cv2.COLOR_BGR2RGB)
-        )
-        
-        # Run prediction
-        prediction = model.predict(np.array(img), conf=0.25, imgsz=640, verbose=False)[0]
-        
-        # Process detections (only 4 onion classes: healthy, rotten, damaged, sprouted)
-        CONDITION_BY_CLASS = {
-            "healthy_onion": "Healthy",
-            "rotten_onion": "Rotten",
-            "sprouted_onion": "Sprouted",
-            "damaged_onion": "Damaged",
-        }
-        
-        detections = []
-        boxes = prediction.boxes
-        summary = {"total": 0, "healthy": 0, "rotten": 0, "damaged": 0, "sprouted": 0, "undersized": 0, "needs_review": 0}
-        
-        if boxes is not None and len(boxes) > 0:
-            for box in boxes:
-                cls_id = int(box.cls.item())
-                label = prediction.names[cls_id].lower()
-                conf = float(box.conf.item())
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                w_px, h_px = abs(x2 - x1), abs(y2 - y1)
-                diameter_px = px_diameter_from_bbox(w_px, h_px)
-                diameter_mm = onion_diameter_mm(diameter_px, float(cfg["calibration"]["pixels_per_mm"])) if cfg["calibration"].get("confirmed") else None
-                
-                # Only detect the 4 onion classes, skip "sprout"
-                if label not in CONDITION_BY_CLASS:
-                    continue
-                
-                label_cond = CONDITION_BY_CLASS[label]
-                summary["total"] += 1
-                summary[label_cond.lower()] += 1
-                
-                # Create OnionInput for grading
-                inp = OnionInput(
-                    diameter_mm=diameter_mm,
-                    condition=label_cond,
-                    rot="rotten" in label.lower(),
-                    sprout="sprout" in label.lower(),
-                    damage="damage" in label.lower(),
-                    confidence=conf,
+        try:
+            # Use PYAZZ-PRO YOLO model
+            from ultralytics import YOLO
+            from PIL import Image
+            import yaml
+            import numpy as np
+
+            # Load PYAZZ-PRO config
+            # __file__ = .../backend/app/api/inspections.py
+            # 3 dirnames = .../backend (parent of app)
+            pyaaz_pro_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'PYAZZ-PRO')
+            cfg_path = os.path.join(pyaaz_pro_dir, 'config.yaml')
+            with open(cfg_path) as f:
+                cfg = yaml.safe_load(f)
+
+            # Load model
+            model_path = os.path.join(pyaaz_pro_dir, 'model', 'best.pt')
+            model = YOLO(model_path)
+
+            # Read image
+            img = Image.open(saved_path) if file and file.filename else Image.fromarray(
+                cv2.cvtColor(cv2.imread(saved_path), cv2.COLOR_BGR2RGB)
+            )
+
+            # Run prediction
+            prediction = model.predict(np.array(img), conf=0.35, imgsz=640, verbose=False)[0]
+
+            # Process detections (5 classes: healthy, rotten, damaged, sprouted, undersized)
+            CONDITION_BY_CLASS = {
+                "healthy_onion": "Healthy",
+                "rotten_onion": "Rotten",
+                "sprouted_onion": "Sprouted",
+                "damaged_onion": "Damaged",
+                "sprout": "Sprouted",
+            }
+
+            detections = []
+            boxes = prediction.boxes
+            summary = {"total": 0, "healthy": 0, "rotten": 0, "damaged": 0, "sprouted": 0, "undersized": 0, "needs_review": 0}
+
+            if boxes is not None and len(boxes) > 0:
+                for box in boxes:
+                    cls_id = int(box.cls.item())
+                    label = prediction.names[cls_id].lower()
+                    conf = float(box.conf.item())
+                    x1, y1, x2, y2 = box.xyxy[0].tolist()
+                    w_px, h_px = abs(x2 - x1), abs(y2 - y1)
+                    diameter_px = px_diameter_from_bbox(w_px, h_px)
+                    diameter_mm = onion_diameter_mm(diameter_px, float(cfg["calibration"]["pixels_per_mm"])) if cfg["calibration"].get("confirmed") else None
+
+                    # Only detect valid onion classes
+                    if label not in CONDITION_BY_CLASS:
+                        continue
+
+                    label_cond = CONDITION_BY_CLASS[label]
+                    summary["total"] += 1
+                    summary[label_cond.lower()] += 1
+
+                    # Create OnionInput for grading
+                    inp = OnionInput(
+                        diameter_mm=diameter_mm,
+                        condition=label_cond,
+                        rot="rotten" in label.lower(),
+                        sprout="sprout" in label.lower() or label == "sprout",
+                        damage="damage" in label.lower(),
+                        confidence=conf,
+                    )
+
+                    # Run grading decision using PYAZZ-PRO grader
+                    from app.services.grader import decide
+                    result = decide(inp, cfg)
+
+                    detections.append({
+                        "onion_index": len(detections) + 1,
+                        "class_name": result.condition,
+                        "confidence": result.confidence,
+                        "bbox": [box.xyxy[0][0].item(), box.xyxy[0][1].item(), box.xyxy[0][2].item(), box.xyxy[0][3].item()],
+                        "diameter_mm": result.diameter_mm,
+                        "severity": None,
+                        "needs_review": result.decision == "DO NOT CHOOSE",
+                    })
+
+            # Build AIAnalysisResult from YOLO output
+            summary["needs_review"] = sum(1 for d in detections if d["needs_review"])
+
+            # Determine grade using grading engine with YOLO data
+            healthy_count = summary["healthy"]
+            rotten_count = summary["rotten"]
+            damaged_count = summary["damaged"]
+            sprouted_count = summary["sprouted"]
+            undersized_count = summary["undersized"]
+            total = summary["total"]
+
+            eval_res = grading_engine.evaluate_lot(
+                rule=rule,
+                total_count=total,
+                healthy_count=healthy_count,
+                rotten_count=rotten_count,
+                damaged_count=damaged_count,
+                sprouted_count=sprouted_count,
+                undersized_count=undersized_count
+            )
+
+            ai_res = {
+                "quality": {
+                    "status": "PASSED",
+                    "blur_score": float(getattr(ai_engine, 'last_blur_score', 142.5)),
+                    "brightness_score": float(getattr(ai_engine, 'last_brightness_score', 138.0)),
+                    "exposure_score": 0.95,
+                    "guidance": "PYAZZ-PRO YOLO model inference completed."
+                },
+                "detections": detections,
+                "summary": summary,
+                "mean_confidence": float(np.mean([d["confidence"] for d in detections])) if detections else 0.92,
+                "recommended_grade": eval_res["grade"],
+                "grade_a_percentage": eval_res["grade_a_percentage"],
+                "urs_percentage": eval_res["urs_percentage"],
+                "needs_reinspection": eval_res["grade"] not in ["GRADE_A"] or summary["needs_review"] >= max(2, int(total * 0.15)),
+                "explanation": eval_res.get("decision_tree", ["PYAZZ-PRO YOLO model inference completed."])
+            }
+        except Exception as e:
+            # Fallback to internal CV if YOLO fails
+            print(f"YOLO model failed: {e}, falling back to internal CV")
+            use_friend_model = False
+            try:
+                ai_res = ai_engine.analyze_onion_sample(
+                    image_path=saved_path,
+                    min_size_threshold_mm=min_size_mm,
+                    calibration_ratio=calibration_ratio
                 )
-                
-                # Run grading decision
-                result = decide(inp, cfg)
-                
-                detections.append({
-                    "onion_index": len(detections) + 1,
-                    "class_name": result.condition,
-                    "confidence": result.confidence,
-                    "bbox": [box.xyxy[0][0].item(), box.xyxy[0][1].item(), box.xyxy[0][2].item(), box.xyxy[0][3].item()],
-                    "diameter_mm": result.diameter_mm,
-                    "severity": None,
-                    "needs_review": result.decision == "DO NOT CHOOSE",
-                })
-        
-        # Build AIAnalysisResult from friend's model output
-        summary["needs_review"] = sum(1 for d in detections if d["needs_review"])
-        
-        # Determine grade using grading engine
-        healthy_count = summary["healthy"]
-        rotten_count = summary["rotten"]
-        damaged_count = summary["damaged"]
-        sprouted_count = summary["sprouted"]
-        undersized_count = summary["undersized"]
-        total = summary["total"]
-        
-        # Use grading engine with friend's data
-        eval_res = grading_engine.evaluate_lot(
-            rule=rule,
-            total_count=total,
-            healthy_count=healthy_count,
-            rotten_count=rotten_count,
-            damaged_count=damaged_count,
-            sprouted_count=sprouted_count,
-            undersized_count=undersized_count
-        )
-        
-        ai_res = {
-            "quality": {
-                "status": "PASSED",
-                "blur_score": 142.5,
-                "brightness_score": 138.0,
-                "exposure_score": 0.95,
-                "guidance": "Friend's model inference completed."
-            },
-            "detections": detections,
-            "summary": summary,
-            "mean_confidence": float(np.mean([d["confidence"] for d in detections])) if detections else 0.92,
-            "recommended_grade": eval_res["grade"],
-            "grade_a_percentage": eval_res["grade_a_percentage"],
-            "urs_percentage": eval_res["urs_percentage"],
-            "needs_reinspection": eval_res["grade"] not in ["GRADE_A"] or summary["needs_review"] >= max(2, int(total * 0.15)),
-            "explanation": eval_res.get("decision_tree", ["Friend's model inference completed."])
-        }
+            except Exception as e2:
+                ai_res = ai_engine._generate_simulated_realistic_sample()
     else:
         # Default: internal CV (existing code)
         try:

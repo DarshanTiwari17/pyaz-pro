@@ -4,7 +4,8 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased font-sans selection:bg-forest-100 selection:text-forest-900;
+    font-family: 'Google Sans', 'Product Sans', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    @apply bg-slate-50 text-slate-900 antialiased selection:bg-forest-100 selection:text-forest-900;
   }
 }
 
@@ -29,9 +30,15 @@
 
 /* Print styling for official quality certificates */
 @media print {
+  @page {
+    margin: 10mm;
+    size: A4 portrait;
+  }
   body {
     background: white !important;
     color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .no-print {
     display: none !important;

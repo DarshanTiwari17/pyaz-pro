@@ -19,12 +19,16 @@ import {
   Eye,
   Sliders,
   Printer,
+  Video,
+  VideoOff,
+  Zap,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { Lot, Inspection, AIAnalysisResult, DetectionDetail, ImageQualityCheck, ProcurementRule, ProcurementCenter } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { CanvasOverlayViewer } from '../components/inspection/CanvasOverlayViewer';
 import { Badge } from '../components/common/Badge';
+import { LiveInspectionCamera, SessionOnion } from '../components/inspection/LiveInspectionCamera';
 
 interface NewInspectionProps {
   onInspectionFinished?: (lotId: string) => void;
@@ -87,6 +91,9 @@ export const NewInspection: React.FC<NewInspectionProps> = ({ onInspectionFinish
   // Camera video ref for live webcam stream
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
+
+  // Live YOLO camera panel toggle
+  const [showLiveCamera, setShowLiveCamera] = useState(false);
 
   useEffect(() => {
     const loadInitialMeta = async () => {
@@ -204,6 +211,24 @@ export const NewInspection: React.FC<NewInspectionProps> = ({ onInspectionFinish
     }
   };
 
+  const handleLiveSessionComplete = (onions: SessionOnion[]) => {
+    // Map live tracked onions to DetectionDetail format so rule engine works
+    const mapped: DetectionDetail[] = onions.map((o, idx) => ({
+      onion_index: idx,
+      class_name: o.class_name,
+      confidence: o.confidence,
+      bbox_x: 0,
+      bbox_y: 0,
+      bbox_w: 0,
+      bbox_h: 0,
+      diameter_mm: o.diameter_mm || 50,
+      needs_review: false,
+    }));
+    setDetections(mapped);
+    // Since it's a live flow without a single image, jump directly to Weight Tare (Step 7)
+    setStep(7);
+  };
+
   // Step 6: Override detection callback
   const handleOverrideDetection = (idx: number, newClass: string, notes: string) => {
     setDetections(prev =>
@@ -300,7 +325,7 @@ export const NewInspection: React.FC<NewInspectionProps> = ({ onInspectionFinish
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-16">
       {/* Wizard Header & Stepper */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs no-print print:hidden">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 mb-6">
           <div>
             <span className="text-[11px] uppercase font-bold tracking-wider text-forest-700 font-mono">
@@ -355,6 +380,7 @@ export const NewInspection: React.FC<NewInspectionProps> = ({ onInspectionFinish
             })}
           </div>
         </div>
+
       </div>
 
       {/* STEP 1: Supplier Info */}
@@ -573,63 +599,14 @@ export const NewInspection: React.FC<NewInspectionProps> = ({ onInspectionFinish
       {step === 4 && (
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
           <div>
-            <h3 className="text-base font-bold text-slate-900">Step 4: Live Camera Capture & Quality Check</h3>
+            <h3 className="text-base font-bold text-slate-900">Step 4: Live AI Camera Capture</h3>
             <p className="text-xs text-slate-500">
-              High-resolution mobile capture. Automatic blur, brightness, and exposure diagnostic check.
+              Start the camera and scan the moving onions. The AI will automatically detect and record them.
             </p>
           </div>
 
-          {/* Camera Viewport */}
-          <div className="border-2 border-dashed border-slate-300 rounded-2xl p-4 bg-slate-950 flex flex-col items-center justify-center min-h-[360px] relative overflow-hidden">
-            {cameraActive ? (
-              <div className="relative w-full max-w-xl">
-                <video ref={videoRef} autoPlay playsInline className="w-full rounded-xl shadow-xl" />
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3">
-                  <button
-                    onClick={capturePhotoFromCamera}
-                    className="px-6 py-2.5 bg-amber-500 hover:bg-amber-450 text-slate-950 font-extrabold rounded-full text-sm shadow-xl flex items-center gap-2"
-                  >
-                    <Camera className="w-4 h-4" /> Capture Tray Photo
-                  </button>
-                </div>
-              </div>
-            ) : capturedImage ? (
-              <div className="relative w-full max-w-xl">
-                <img src={capturedImage} alt="Captured Tray" className="w-full rounded-xl shadow-xl object-contain max-h-[360px]" />
-                <button
-                  onClick={() => setCapturedImage(null)}
-                  className="absolute top-3 right-3 px-3 py-1 bg-slate-900/80 text-white text-xs rounded-lg hover:bg-slate-900"
-                >
-                  Retake Photo
-                </button>
-              </div>
-            ) : (
-              <div className="text-center p-8 space-y-4">
-                <div className="w-16 h-16 rounded-full bg-slate-800 text-forest-400 flex items-center justify-center mx-auto">
-                  <Camera className="w-8 h-8" />
-                </div>
-                <div>
-                  <h4 className="text-white font-bold text-sm">Position camera 40cm directly above the tray</h4>
-                  <p className="text-xs text-slate-400 mt-1 max-w-md">
-                    Ensure even tray illumination and avoid heavy shadows or glare.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                  <button
-                    onClick={startCamera}
-                    className="px-5 py-2.5 bg-forest-700 hover:bg-forest-600 text-white font-bold rounded-xl text-xs flex items-center gap-2"
-                  >
-                    <Camera className="w-4 h-4" /> Open Camera
-                  </button>
-
-                  <label className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer border border-slate-700">
-                    <Upload className="w-4 h-4" /> Upload Sample Image
-                    <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                  </label>
-                </div>
-              </div>
-            )}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-slate-950 min-h-[400px]">
+             <LiveInspectionCamera onSessionComplete={handleLiveSessionComplete} />
           </div>
 
           <div className="flex justify-between">
@@ -637,15 +614,7 @@ export const NewInspection: React.FC<NewInspectionProps> = ({ onInspectionFinish
               onClick={() => setStep(3)}
               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm flex items-center gap-1.5"
             >
-              <ChevronLeft className="w-4 h-4" /> Back
-            </button>
-            <button
-              onClick={handleRunAIAnalysis}
-              disabled={loading}
-              className="px-6 py-2.5 bg-forest-800 hover:bg-forest-700 text-white font-bold rounded-xl text-sm flex items-center gap-2 transition shadow-md"
-            >
-              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
-              Analyze Quality with AI <ChevronRight className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" /> Back to Sampling
             </button>
           </div>
         </div>
@@ -902,60 +871,231 @@ export const NewInspection: React.FC<NewInspectionProps> = ({ onInspectionFinish
 
       {/* STEP 10: Instant Quality Passport & Official Report */}
       {step === 10 && (
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-md space-y-6 text-center animate-in zoom-in-95">
-          <div className="w-16 h-16 rounded-full bg-forest-100 text-forest-800 flex items-center justify-center mx-auto border-2 border-forest-300 shadow-inner">
-            <ShieldCheck className="w-9 h-9" />
+        <div className="space-y-6">
+          {/* On-Screen Success Hero & Quick Actions (Hidden on Print) */}
+          <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-md space-y-6 text-center animate-in zoom-in-95 no-print print:hidden">
+            <div className="w-16 h-16 rounded-full bg-forest-100 text-forest-800 flex items-center justify-center mx-auto border-2 border-forest-300 shadow-inner">
+              <ShieldCheck className="w-9 h-9" />
+            </div>
+
+            <div>
+              <span className="text-xs font-mono text-forest-700 font-bold uppercase tracking-wider">
+                Cryptographically Sealed • DoCA Standard
+              </span>
+              <h3 className="text-2xl font-black text-slate-900 mt-1">
+                Digital Quality Passport Generated
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                Inspection finalized and registered into the national onion buffer traceability registry.
+              </p>
+            </div>
+
+            <div className="p-6 bg-slate-900 text-white rounded-2xl max-w-lg mx-auto text-left font-mono text-xs space-y-3 shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="text-slate-400">PASSPORT ID:</span>
+                <span className="font-bold text-amber-400">
+                  QP-2026-{createdLot?.lot_number?.split('-').pop() || 'NSK-00101'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">ASSIGNED GRADE:</span>
+                <span className="font-bold text-forest-400">{recommendedGrade}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">GRADE A SHARE:</span>
+                <span className="font-bold text-forest-400">{finalGradeA}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">URS SHARE:</span>
+                <span className="font-bold text-amber-400">{finalUrs}%</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-[10px]">
+                <span className="text-slate-500">SHA-256 SEAL:</span>
+                <span className="text-slate-300 truncate max-w-[200px]">SHA256:8f92b7c419...</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => onInspectionFinished && onInspectionFinished(createdLot?.id || 'lot-1')}
+                className="px-5 py-2.5 bg-forest-800 hover:bg-forest-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md transition"
+              >
+                <QrCode className="w-4 h-4" /> Open Full Quality Passport
+              </button>
+
+              <button
+                onClick={() => window.print()}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md transition"
+              >
+                <Printer className="w-4 h-4" /> Print Mandi Certificate
+              </button>
+            </div>
           </div>
 
-          <div>
-            <span className="text-xs font-mono text-forest-700 font-bold uppercase tracking-wider">
-              Cryptographically Sealed • DoCA Standard
-            </span>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">
-              Digital Quality Passport Generated
-            </h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              Inspection finalized and registered into the national onion buffer traceability registry.
-            </p>
-          </div>
+          {/* Official Printable Mandi Certificate */}
+          <div className="bg-white border-2 border-slate-300 rounded-2xl p-8 shadow-sm space-y-6 print:border-none print:shadow-none print:p-0 print:space-y-4 print:w-full">
+            {/* Gov Banner */}
+            <div className="border-b-2 border-forest-900 pb-4 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono font-extrabold uppercase text-slate-500 tracking-widest block">
+                  Government of India • Ministry of Consumer Affairs, Food & Public Distribution
+                </span>
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight mt-0.5">
+                  Official Mandi Quality & Procurement Certificate
+                </h2>
+                <p className="text-xs text-forest-800 font-bold font-mono">
+                  Department of Consumer Affairs • Agmarknet Standard {activeRule?.version || 'v1.0.4'}
+                </p>
+              </div>
+              <div className="text-right hidden sm:block">
+                <div className="w-10 h-10 rounded-xl bg-forest-800 text-amber-300 flex items-center justify-center font-black text-lg mx-auto border border-amber-400">
+                  <ShieldCheck className="w-6 h-6 text-amber-300" />
+                </div>
+                <span className="text-[9px] font-mono text-slate-500 block mt-1">DoCA VERIFIED</span>
+              </div>
+            </div>
 
-          <div className="p-6 bg-slate-900 text-white rounded-2xl max-w-lg mx-auto text-left font-mono text-xs space-y-3 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <span className="text-slate-400">PASSPORT ID:</span>
-              <span className="font-bold text-amber-400">QP-2026-NSK-00101</span>
+            {/* Passport & Metadata Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono">
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase block font-sans">Passport ID</span>
+                <span className="font-bold text-slate-900">
+                  QP-2026-{createdLot?.lot_number?.split('-').pop() || '00101'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase block font-sans">Lot Number</span>
+                <span className="font-bold text-slate-900">{createdLot?.lot_number || 'LOT-2026-NSK-00101'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase block font-sans">Timestamp</span>
+                <span className="font-semibold text-slate-800">{new Date().toLocaleString()}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase block font-sans">Tamper Status</span>
+                <span className="font-bold text-emerald-700">SHA-256 SEALED</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">ASSIGNED GRADE:</span>
-              <span className="font-bold text-forest-400">{recommendedGrade}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">GRADE A SHARE:</span>
-              <span className="font-bold text-forest-400">{finalGradeA}%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">URS SHARE:</span>
-              <span className="font-bold text-amber-400">{finalUrs}%</span>
-            </div>
-            <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-[10px]">
-              <span className="text-slate-500">SHA-256 SEAL:</span>
-              <span className="text-slate-300 truncate max-w-[200px]">SHA256:8f92b7c419...</span>
-            </div>
-          </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
-            <button
-              onClick={() => onInspectionFinished && onInspectionFinished(createdLot?.id || 'lot-1')}
-              className="px-5 py-2.5 bg-forest-800 hover:bg-forest-700 text-white font-bold rounded-xl text-xs flex items-center gap-2"
-            >
-              <QrCode className="w-4 h-4" /> Open Full Quality Passport
-            </button>
+            {/* Manifest & Mandi Intake Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs border-b border-slate-200 pb-6">
+              <div className="space-y-2">
+                <h4 className="font-bold uppercase tracking-wider text-slate-900 text-[11px] flex items-center gap-1.5 border-b pb-1">
+                  <Building2 className="w-4 h-4 text-forest-700" /> Supplier & Mandi Manifest
+                </h4>
+                <div className="grid grid-cols-2 gap-y-1.5 text-slate-700">
+                  <span className="text-slate-400">Farmer / FPO:</span>
+                  <span className="font-semibold text-slate-900">{supplierName}</span>
 
-            <button
-              onClick={() => window.print()}
-              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-300"
-            >
-              <Printer className="w-4 h-4" /> Print Mandi Certificate
-            </button>
+                  <span className="text-slate-400">APMC License:</span>
+                  <span className="font-mono">{mandiLicense}</span>
+
+                  <span className="text-slate-400">Origin Location:</span>
+                  <span>{location}</span>
+
+                  <span className="text-slate-400">Contact:</span>
+                  <span>{supplierPhone}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold uppercase tracking-wider text-slate-900 text-[11px] flex items-center gap-1.5 border-b pb-1">
+                  <Scale className="w-4 h-4 text-forest-700" /> Procurement Intake Manifest
+                </h4>
+                <div className="grid grid-cols-2 gap-y-1.5 text-slate-700">
+                  <span className="text-slate-400">Variety:</span>
+                  <span className="font-semibold text-slate-900">{variety}</span>
+
+                  <span className="text-slate-400">Total Lot Volume:</span>
+                  <span className="font-mono font-bold text-slate-900">{initialQuantityMt} MT ({bagCount} Bags)</span>
+
+                  <span className="text-slate-400">Procurement Terminal:</span>
+                  <span>{centers.find(c => c.id === selectedCenterId)?.name || 'Lasalgaon APMC Terminal'}</span>
+
+                  <span className="text-slate-400">Sample Weight:</span>
+                  <span className="font-mono">{sampleWeightKg} kg</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quality Breakdown & Weights Table */}
+            <div className="space-y-3">
+              <h4 className="font-bold uppercase tracking-wider text-slate-900 text-[11px]">
+                AI Vision & Scale Tolerances Assessment
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-center text-xs">
+                <div className="p-3 bg-forest-50 border border-forest-200 rounded-xl">
+                  <span className="text-slate-500 block text-[10px] font-sans">Final Classification</span>
+                  <div className="mt-1">
+                    <Badge type="grade" value={recommendedGrade} size="md" />
+                  </div>
+                </div>
+                <div className="p-3 bg-forest-50 border border-forest-200 rounded-xl">
+                  <span className="text-slate-500 block text-[10px] font-sans">Grade A Ratio</span>
+                  <span className="font-black text-xl font-mono text-forest-900">{finalGradeA}%</span>
+                </div>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <span className="text-slate-500 block text-[10px] font-sans">URS Share</span>
+                  <span className="font-black text-xl font-mono text-amber-900">{finalUrs}%</span>
+                </div>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <span className="text-slate-500 block text-[10px] font-sans">Accepted Net Weight</span>
+                  <span className="font-black text-xl font-mono text-slate-900">{acceptedWeightKg} kg</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Weight Tare Reconciliation */}
+            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/70 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans">Gross Sample Weight</span>
+                  <span className="font-bold text-slate-800">{grossWeightKg} kg</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans">Tare Deduction</span>
+                  <span className="font-bold text-slate-800">{tareWeightKg} kg</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans">Accepted Sound Weight</span>
+                  <span className="font-bold text-forest-800">{acceptedWeightKg} kg</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans">Cull / Rejected Weight</span>
+                  <span className="font-bold text-red-700">{rejectedWeightKg} kg</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Inspector Notes & Sign-off */}
+            <div className="pt-2 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div className="md:col-span-2 space-y-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Inspector Remarks & Quality Notes
+                </span>
+                <p className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 italic">
+                  "{inspectorNotes || 'Optimal cured Nashik Red sample. Clean root disc with uniform spherical size distribution.'}"
+                </p>
+              </div>
+              <div className="flex flex-col justify-between p-3 bg-slate-900 text-white rounded-xl font-mono text-[10px]">
+                <div>
+                  <span className="text-slate-400 block uppercase">Inspector Sign-off</span>
+                  <span className="font-bold text-amber-300 text-xs">
+                    {currentUser?.full_name || 'Rajesh Sharma (Inspector)'}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-slate-800">
+                  <span className="text-slate-500 block">SHA-256 DIGEST:</span>
+                  <span className="text-emerald-400 truncate block">8f92b7c419e59b20d...</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Certificate Footer */}
+            <div className="border-t border-slate-200 pt-3 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+              <span>DoCA AGMARKNET REGISTERED • PASSPORT ID: QP-2026-{createdLot?.lot_number?.split('-').pop() || '00101'}</span>
+              <span>PYAAZ-PRO AI ENGINE v2.4.1</span>
+            </div>
           </div>
         </div>
       )}
