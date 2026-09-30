@@ -41,18 +41,24 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware for frontend communication
-# Note: allow_credentials=True is incompatible with allow_origins=["*"].
-# List explicit origins so the browser accepts the response headers.
+# CORS middleware for frontend communication (supports Vercel production & preview deployments)
+cors_origins = [
+    "https://pyaz-pro.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8080",
+]
+
+env_origins = os.getenv("CORS_ORIGINS")
+if env_origins:
+    cors_origins.extend([o.strip() for o in env_origins.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8080",
-    ],
+    allow_origins=cors_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
