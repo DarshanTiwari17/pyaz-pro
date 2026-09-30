@@ -1,0 +1,508 @@
+# ============================================================
+# PYAAZ-PRO
+# Full Git Ignore
+# React/Vite + Python/FastAPI + Streamlit + ML
+# ============================================================
+
+
+# ============================================================
+# FRONTEND — REACT / VITE / NODE
+# ============================================================
+
+# Node dependencies
+node_modules/
+frontend/node_modules/
+
+# Production / build output
+dist/
+frontend/dist/
+build/
+frontend/build/
+
+# Vite
+.vite/
+frontend/.vite/
+
+# npm logs
+npm-debug.log*
+npm-error.log*
+
+# Yarn logs
+yarn-debug.log*
+yarn-error.log*
+
+# pnpm logs
+pnpm-debug.log*
+
+# Package manager caches
+.npm/
+.yarn/
+.pnpm-store/
+
+# TypeScript
+*.tsbuildinfo
+
+# ESLint
+.eslintcache
+
+
+# ============================================================
+# FRONTEND ENVIRONMENT VARIABLES / SECRETS
+# ============================================================
+
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Keep example environment files
+!.env.example
+!frontend/.env.example
+
+
+# ============================================================
+# PYTHON / FASTAPI
+# ============================================================
+
+# Python cache
+__pycache__/
+**/__pycache__/
+
+*.py[cod]
+*$py.class
+
+# Python compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+backend/venv/
+backend/.venv/
+backend/env/
+
+# Python packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Pip cache
+pip-wheel-metadata/
+.pip-cache/
+
+# Testing
+.pytest_cache/
+.tox/
+.nox/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# Mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# Pytype
+.pytype/
+
+# Ruff
+.ruff_cache/
+
+
+# ============================================================
+# PYTHON ENVIRONMENT VARIABLES / SECRETS
+# ============================================================
+
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+.env
+.env.*
+!.env.example
+
+
+# ============================================================
+# DATABASE
+# ============================================================
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Project database
+backend/pyaaz_pro.db
+
+
+# ============================================================
+# RUNTIME STORAGE
+# ============================================================
+
+# Uploaded images
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+
+# Generated reports
+backend/storage/reports/*
+!backend/storage/reports/.gitkeep
+
+# Temporary storage
+backend/storage/temp/*
+!backend/storage/temp/.gitkeep
+
+# Runtime generated data
+backend/storage/runtime/*
+!backend/storage/runtime/.gitkeep
+
+
+# ============================================================
+# DATASETS
+# ============================================================
+
+# Local datasets
+datasets/
+dataset/
+data/
+
+backend/datasets/
+backend/dataset/
+backend/data/
+
+# Runtime dataset storage
+backend/storage/datasets/*
+!backend/storage/datasets/.gitkeep
+
+# Dataset archives
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+
+# Large data files
+*.csv
+*.parquet
+*.feather
+*.pkl
+*.pickle
+
+# If you have small CSV/config files that MUST be committed,
+# remove the *.csv rule above.
+
+
+# ============================================================
+# MACHINE LEARNING / AI MODELS
+# ============================================================
+
+# Uncomment these ONLY if models are too large for GitHub
+#
+# *.pt
+# *.pth
+# *.onnx
+# *.tflite
+# *.h5
+# *.keras
+# *.ckpt
+# *.safetensors
+# *.bin
+
+# ML experiment outputs
+runs/
+wandb/
+mlruns/
+checkpoints/
+experiments/
+tensorboard/
+logs/ml/
+
+# TensorFlow
+.keras/
+tensorflow_logs/
+
+# PyTorch
+.torch/
+torch_cache/
+
+
+# ============================================================
+# STREAMLIT
+# ============================================================
+
+# Streamlit secrets — NEVER commit
+.streamlit/secrets.toml
+**/.streamlit/secrets.toml
+
+# Streamlit runtime/cache
+.streamlit/cache/
+.streamlit/.cache/
+.streamlit/tmp/
+.streamlit/uploads/
+
+# Streamlit logs
+streamlit.log
+streamlit*.log
+
+# Streamlit generated data
+.streamlit/data/
+.streamlit/generated/
+
+
+# ============================================================
+# LOGS
+# ============================================================
+
+*.log
+logs/
+backend/logs/
+frontend/logs/
+
+uvicorn.log
+gunicorn.log
+server.log
+
+
+# ============================================================
+# TEMPORARY FILES
+# ============================================================
+
+tmp/
+temp/
+.tmp/
+
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# Editor temporary files
+*~
+*.swp
+*.swo
+
+
+# ============================================================
+# GENERATED REPORTS / EXPORTS
+# ============================================================
+
+reports/
+exports/
+output/
+outputs/
+
+backend/reports/
+backend/exports/
+backend/output/
+backend/outputs/
+
+
+# ============================================================
+# GENERATED IMAGES / VIDEOS
+# ============================================================
+
+# Local generated media
+generated_images/
+generated_videos/
+
+backend/generated_images/
+backend/generated_videos/
+
+# Camera captures
+captures/
+backend/captures/
+
+# Don't accidentally commit huge media files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+
+# ============================================================
+# SECURITY / CERTIFICATES / PRIVATE KEYS
+# ============================================================
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Secret files
+secrets/
+secret/
+*.secret
+
+# API keys / credentials
+credentials.json
+service-account.json
+serviceAccount.json
+
+
+# ============================================================
+# IDE — VISUAL STUDIO CODE
+# ============================================================
+
+.vscode/
+*.code-workspace
+
+
+# ============================================================
+# IDE — PYCHARM / INTELLIJ
+# ============================================================
+
+.idea/
+*.iml
+
+
+# ============================================================
+# OTHER EDITORS
+# ============================================================
+
+*.sublime-project
+*.sublime-workspace
+
+.history/
+
+
+# ============================================================
+# JUPYTER NOTEBOOK
+# ============================================================
+
+.ipynb_checkpoints/
+
+
+# ============================================================
+# OS FILES
+# ============================================================
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+
+
+# ============================================================
+# CACHE DIRECTORIES
+# ============================================================
+
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.svelte-kit/
+
+
+# ============================================================
+# LOCAL DEVELOPMENT
+# ============================================================
+
+*.local
+
+# Local configuration
+config.local.*
+settings.local.*
+
+
+# ============================================================
+# DOCKER
+# ============================================================
+
+# Local Docker overrides
+docker-compose.override.yml
+
+# Docker environment files
+docker.env
+
+
+# ============================================================
+# BACKUP / ARCHIVE FILES
+# ============================================================
+
+*.orig
+*.rej
+*.patch
+
+# Backup directories
+backup/
+backups/
+
+
+# ============================================================
+# SYSTEM / MISC
+# ============================================================
+
+.DS_Store
+Thumbs.db
+
+# Local history
+.history/
+
+# OS metadata
+.directory
+
+
+# ============================================================
+# IMPORTANT FILES TO KEEP IN GITHUB
+# ============================================================
+
+# The following should NOT be ignored:
+#
+# frontend/package.json
+# frontend/package-lock.json
+# backend/requirements.txt
+# backend/app/
+# backend/init_db.py
+# .env.example
+# frontend/.env.example
+# backend/.env.example
+# .streamlit/config.toml
+#
+# Keep your actual application source code and configuration
+# templates in GitHub.
